@@ -1,0 +1,36 @@
+[Unit]
+Description=Apache web server sidekick %i
+
+# Requirements
+Requires=etcd.service
+Requires=apache@%i.service
+
+# Dependency ordering and binding
+After=etcd.service
+After=apache@%i.service
+BindsTo=apache@%i.service
+
+[Service]
+
+# Get CoreOS environmental variables
+EnvironmentFile=/etc/environment
+
+# Start
+## Test whether service is accessible and then register useful information
+ExecStart=/bin/bash -c '\
+  while true; do \
+    curl -f ${COREOS_PUBLIC_IPV4}:80; \
+    if [ $? -eq 0 ]; then \
+      etcdctl set /services/apache/${COREOS_PUBLIC_IPV4} \'{"host": "%H", "ipv4_addr": "${COREOS_PUBLIC_IPV4}", "port": 80}\' --ttl 5; \
+    else \
+      etcdctl rm /services/apache/${COREOS_PUBLIC_IPV4}; \
+    fi; \
+    sleep 3; \
+  done'
+
+# Stop
+ExecStop=/usr/bin/etcdctl rm /services/apache/${COREOS_PUBLIC_IPV4}
+
+[X-Fleet]
+# Schedule on the same machine as the associated Apache service
+MachineOf=apache@%i.service
